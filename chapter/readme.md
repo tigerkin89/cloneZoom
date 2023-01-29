@@ -1,4 +1,3 @@
-
 # Noom
 
 Zoom Clene using NodeJS, WebRTC and Websockets.
@@ -185,3 +184,175 @@ https://ko.javascript.info/websocket
  message 구조체
 {isTrusted: true, data: 'Hello!!', origin: 'ws://localhost:3000', lastEventId: '', source: null, …} 
 </pre>
+
+# ch3. 실시간 채팅 완성하기
+## 03-1 채팅 기능 준비하기
+브라우저에서 입력 필드의 목록을 만들고, 메세지를 주고받은 결과를 바로 표시
+
+### 화면에 텍스트 입력 준비 웹 요소 추가하기
+<pre>
+./src/views/home.png
+  ul 
+  form
+    input(type="text",placeholder="write a msg",required)
+    button Send 
+</pre>
+
+### 클라이언트 form 이벤트 등록하기
+
+<pre>
+// ch 3-1 form 이벤트 등록하기
+function handleSummit(event) {
+    event.preventDefault();
+    const input = messageForm.querySelector("input");
+    socket.send(input.value);
+    input.value = "";
+}
+
+messageForm.addEventListener("submit",handleSummit);
+</pre>
+
+### 서버는 클라이언트 메세지를 돌려주기
+<pre>
+wss.on("connection",(socket) =>{
+    // console.log(socket);
+    console.log("Connected to Brower");
+    socket.on("close",() => {
+        console.log("Disconnect from Broser1")
+    });
+    socket.on("message", (message) => {
+        //03-1 클라이언트 메세지를 돌려준다
+        console.log( "recv : " +`${message}`)
+        socket.send(`${message}`);
+
+    });
+    // socket.send("Hello!!");
+
+</pre>
+
+## 03-2 사용자간 채팅하기
+
+여러사람/클라이언트가 동시에 접속한 경우 처리 필요. 브라우저 2개 탭에서 동시에 접속한 경우 각 탭마다 서버는 다른 메세지를 보내기
+
+서버는 client 접속 정보를 기록하고, client로부터 메세지를 수신하면 접속된 client에게 메세지를 전달한다.
+<pre>
+./src/server.js
+wss.on("connection",(socket) =>{
+    // console.log(socket);
+    //03-2 클라이언트의 접속 정보를 기록ㅎㄴㄷ.
+    sockets.push(socket);
+    console.log("Connected to Brower");
+    socket.on("close",() => {
+        console.log("Disconnect from Broser1")
+    });
+    socket.on("message", (message) => {
+        //03-1 클라이언트 메세지를 돌려준다
+        console.log( "recv : " +`${message}`)
+        // socket.send(`${message}`);
+        //03-2 모든 클라이언트에게 메세지를 돌려준다
+        sockets.forEach(aSocket => {
+            aSocket.send(`${message}`);
+        });
+
+    });
+    // socket.send("Hello!!");
+})
+</pre>
+
+클라이언트는 서버로부터 수신된 메세지를 화면에 출력한다.
+<pre>
+./src/public/js/app.js
+socket.addEventListener("message",(message)=> {
+
+     console.log("Recv : " +message.data)
+    // 03-2 서버로부터 수신된 메세지를 브라우저에게 출력하기
+    const li = document.createElement("li");
+    li.innerText = message.data;
+    messageList.append(li)
+
+ })
+ </pre>
+
+ ## 03-3 닉네임추가하기
+ 서버에 클라이언트가 여러명 접속할때 클라이언트를 구분하기 위해 클라이언트에 닉네임 부여
+
+html에는 nickname의 form 추가
+ <pre>
+  ./src/views/home.pug 
+
+            //- h2 Welcome to Noom
+            // 03-3 닉네임 폼 추가하기
+            // 03-3 form을 구분하기 위해 id 지정
+            form#nick
+                input(type="text",placeholder="choose a nicname",required)
+                button Save  
+            ul 
+            form#message
+                input(type="text",placeholder="write a msg",required)
+                button Send 
+ </pre>
+
+ JS에는 nickname의 event handler 추가
+ <pre>
+ ./src/public/js/app.js
+ function handleNickSubmit(event) {
+    event.preventDefault();
+    const input = nickForm.querySelector("input");
+    socket.send(input.value);
+    input.value="";
+}
+nickForm.addEventListener("submit",handleNickSubmit);
+ </pre>
+
+ ### JS에서 닉네임, 메시지를 JSON 문자열로 전달하기
+
+ JS에서 JSON을 문자열로 변환은 JSON.stringfy이용한다.
+
+ JS에서 닉네임, 메시지를 서버로 보낼때 JSON문자열로 변환해서 보낸다.
+ <pre>
+ ./src/public/js/app.js
+ // ch 3-3 JSON을 문자열로 변환
+function makeMessage(type,payload) {
+    const msg = {type,payload};
+    return JSON.stringify(msg)
+}
+
+// ch 3-1 form 이벤트 등록하기
+function handleSummit(event) {
+    event.preventDefault();
+    const input = messageForm.querySelector("input");
+
+    // ch 3-3 JSON을 문자열로 변환
+    // socket.send(input.value);
+    socket.send(makeMessage("new_message",input.value));
+    input.value = "";
+}
+</pre> 
+
+## 03-4 서버에서 닉네임 처리 하기
+
+### 문자열을 JSON으로 변환하기 (JSON.parse).
+
+<pre>
+socket.on("message", (message) => {
+  // 03-4 msg.type별 행동하기, message를 수신하면 전체 전달하고,
+  // nick정보를 저장ㅎㄴ다.
+  const msg = JSON.parse(message);
+  console.log("RECV", msg.type,msg.payload);
+  switch (msg.type) {
+    case "new_message":
+      sockets.forEach ( aSocket => {
+      //03-4 익명자 고려
+      // aSocket.send(`${msg.payload}`);
+        aSocket.send(`${socket.nickname}: ${msg.payload}` );
+      });
+      break;
+    case "nickname":
+      socket["nickname"] = msg.payload;
+      break;
+  }
+        
+
+});
+</pre>
+
