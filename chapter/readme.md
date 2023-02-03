@@ -356,3 +356,263 @@ socket.on("message", (message) => {
 });
 </pre>
 
+# 4.socket.io를 이용한 채팅룸 만들기
+
+## 4.1 socket.io 설치하기
+### socet.io 서버에 적용하기 
+https://socket.io/ 실시간,양방향,이벤트에 기반한 프레임 워크
+socket.io 설치 후, 서버.js에 SocketIO 서버를 설정한다.
+http://localhost:3000/socket.io/socket.io.js는 socket.io 소스 코드를 제공한다.
+socket.io의 이벤트를 등록한다.
+<pre>
+$npm i socket.io #socket.io 설치
+./src/server.js
+
+//http 서버와 웹소켓 서버 구분
+const httpServer = http.createServer(app);
+const wsServer=SocketIO(httpServer);
+//웹소켓 이벤트 등록
+wsServer.on("connection", (socket) => {
+    console.log(socket);
+});
+
+const handleListen = () => {
+    console.log("Listening on http://localhost:3000");
+}
+httpServer.listen(3000,handleListen);
+</pre>
+
+### socket.io 클라이언트에 적용하기
+http://localhost:3000/socket.io/socket.io.js는 socket.io 소스 코드를 제공한다. home.pug에 socet.io 설치한다.
+
+<pre>
+./src/views/home.pug
+// ch4 socket.io 적용하기
+    body 
+        header 
+            h1 Noom 
+        main 
+        script(src="/socket.io/socket.io.js")
+        script(src="/public/js/app.js")
+</pre>
+
+WebSocket(`ws://${window.localhost.host}`);를 이용하여 서버와 연결하였는데..socket.io를 적용으로 필요없게 되었다.
+<pre>
+./src/views/app.js
+const socket = io();
+</pre>
+
+## 4-2 socket.io 다루기
+채팅룸에 접속한 사용자끼리만 채팅하기
+
+### 채팅룸 이름을 입력할 폼 만들기 (home.pug)
+
+<pre>
+./src/views/home.pug
+main
+    div#welcome
+        form
+            input(placeholder="room name",required type="text")
+            button Enter Room   
+script(src="/socket.io/socket.io.js") 
+script(src="/public/js/app.js")
+</pre>
+
+### 채팅룸 폼 가져와서 서버에게 이벤트 전달하기
+socket.emit는 서버에게 이벤트를 전달한다. 첫번째 인자는 이벤트명, 중간 args는 데이타이다. call_back을 클라이언트에서 정의하고, 서버에서 수행을 하며, 클라이언트에서 실행한다. call_back은 생략가능하지만, 정의되면 마지막 인자이다.
+socket.emit("enter_room",input.value,,,call_back)
+<pre>
+const socket = io();
+
+const welcome = document.getElementById("welcome");
+const form = welcome.querySelector("form");
+
+function handleRoomSubmit(event){
+    event.preventDefault();
+    const input = form.querySelector("input");
+    //이벤트를 발생하여 서버에게 전달한다. 이벤트이름은 enter_room이다.
+    // socket.emit("enter_room",{payload: input.value});
+
+    //이벤트를 발생하여 서버에게 전달한다. 이벤트이름은 enter_room이다.
+    //두번째 인자는 서버에 전달할 데이타,
+    //세번째 인자는 서버에서 호출할 콜백 함수. 
+    socket.emit("enter_room",input.value, () => {
+        console.log("server is done!!");
+    });
+    input.value="";
+}
+
+form.addEventListener("submit",handleRoomSubmit);
+</pre>
+
+### 서버는 클라이언트 이벤트를 핸들링한다.
+
+<pre>
+//웹소켓 이벤트 등록
+wsServer.on("connection", (socket) => {
+    console.log(socket);
+    socket.on("enter_room",(roomName,done) => {
+        console.log(roomName);
+        setTimeout(() => {
+            done();
+        },5000);
+    })
+});
+</pre>
+
+## 4-3 채팅룸 만들기 
+
+### 서버의 grouping(room 단위로 묶는 기능)
+socket.join을 제공하여 room 단위별 grouping한다. Within each Namespace, you can also define **arbitrary channels (called room)**  that the Socket can join and leave. That provides a convenient way to **broadcast to a group of Sockets** 
+<pre>
+./src/server.js
+socket.on("enter_room",(roomName,done) => {
+  console.log(roomName);
+  // 04-3 채팅룸 접속하기
+  // socket.io는 사용자들을 room 단위로 묶는 기능을 제공한다.
+  // https://socket.io/docs/v4/server-api/#socket 참고
+  console.log("socket.id",socket.id);
+  console.log("sockets.rooms",socket.rooms);
+  socket.join(roomName);
+  console.log("sockets.rooms", socket.rooms);
+})
+</pre>
+
+### home.hug는 메세지 전송 form을 만든다.
+<pre>
+main
+   div#welcome
+       form
+           input(placeholder="room name",required,type="text")
+           button Enter Room  
+   //div#room을 추가한다.
+   div#room 
+       ul 
+           form 
+               input(placeholder="message",required,type="text")
+               button Send 
+script(src="/socket.io/socket.io.j
+</pre>
+
+### app.js는 room / message form visual 조절
+
+<pre>
+./src/public/app.js
+
+room.hidden = true;
+
+function showRoom() {
+    welcome.hidden = true;
+    room.hidden = false;
+}
+function handleRoomSubmit(event){
+    event.preventDefault();
+    const input = form.querySelector("input");
+
+    //4.3 최초 room form만 보이고, 롬 이름 접속후에는 룸이름 사라지고,
+    //    메세지 폼만 보이도록 한다.
+    socket.emit("enter_room",input.value,showRoom);
+    input.value="";
+}
+</pre>
+### home.hug 채팅룸 이름 표시하기
+
+## 4-4 채팅룸 안에서 메시지 교환하기
+socket.io는 룸 기능 제공과 함께 메세지 전송 기능을 제공한다.
+
+emit으로 이벤트가 발생하며, join 메서드로 접속한 채팅룸 대상으로 이벤트를
+발생할 수 있다. (to 메서드)
+|서버Event수신|내용|
+|-----------|---|
+|enter_room |클라이언트 JS에서 채팅룸 입력 subbmit시 emit으로 이벤트 발생|
+|disconnect|socket.io에서 브라우저 종료시 발생|
+|new_message|클라이언트 JS에서 메세지 입력 submit시 emit으로 이벤트 발생 |
+<pre>
+./src/server.js
+wsServer.on("connection", (socket) => {
+    //클라이언트에서 callback을 전달한 경우
+    socket.on("enter_room",(roomName,done) => {
+        //4.4 채팅룸에 참여한 소켓들에 대해서만 welcome 이벤트를 발생시킨다.
+        done();
+        socket.join(roomName);
+        socket.to(roomName).emit("welcome");
+    });
+    // 04-5  채팅룸을 나갈때 메세지 표시
+    socket.on("disconnecting", () => {
+        socket.rooms.forEach( room =>
+            socket.to(room).emit("bye"));
+    });
+    //04-5 메세지를 받을때 처리
+    socket.on("new_message",(msg,room,done) => {
+        console.log("new_message: ",msg);
+        socket.to(room).emit("send_message",msg);
+        done();
+    })
+</pre>
+### 클라이언트는 서버가 보내는 이벤트 처리 및 서버로 이벤트 전달
+서버가 보내는 이벤트를 처리한다.
+|Event수신|내용|
+|-----------|---|
+|bye |다른 클라이언트가 종료시 서버가 이벤트 발생. 메세지를 화면에 출력한다.|
+|send_message|다른 클라이언트가 메세지를 서버에게 보낼때 서버가 이벤트 발생.  메세지를 화면에 출력한다.|
+
+<pre>
+./src/public/js/app.js
+function addMessage(message) {
+    const ul = room.querySelector("ul");
+    const li = document.createElement("li");
+    li.innerText = message;
+    ul.appendChild(li);
+}
+// 04-5  채팅룸을 나갈때 메세지 표시
+socket.on("bye",() => {
+    addMessage("someone left ㅠㅠ");
+})
+
+//04-5 서버에서 메세지를 보냈다.
+socket.on("send_message",(msg) => {
+    message = "From : " + msg;
+    addMessage(message);
+})
+</pre>
+
+사용자가 입력한 채팅방 이름 / 메세지 입력 내용을 서버에게 이벤트를 발생하여 전달한다.
+|Event발생|내용|
+|-----------|---|
+|enter_room |사용자가 채팅방 form을 submit시 이벤트를 서버로 전달한다.|
+|new_message|사용자가 메세지 form을 submit하면 이벤트를 서버로 전달한다.|
+<pre>
+./src/public/js/app.js
+// 04-4 message handler는 이벤트를 발생시키고,
+// 서버에서 상대방에게 메세지를 전달하는 send_message 이벤트를 전달하고,
+// 실행시킬 call back를 정의한다. 
+function handleMessageSubmit(event){
+    event.preventDefault();
+    const input = room.querySelector("input");
+    const value = input.value;
+    socket.emit("new_message",value,roomName, () => {
+        addMessage(`You: ${value}`);
+    });
+    input.value="";
+}
+function showRoom() {
+    welcome.hidden = true;
+    room.hidden = false;
+    const h3 = room.querySelector("h3");
+    h3.innerText = `Room ${roomName}`;
+    //04-4 message send submit 처리를 위한 handler 등록
+    const form = room.querySelector("form");
+    form.addEventListener("submit",handleMessageSubmit);
+  }
+function handleRoomSubmit(event){
+    event.preventDefault();
+    const input = form.querySelector("input");
+    //4.3 최초 room form만 보이고, 롬 이름 접속후에는 룸이름 사라지고,
+    //    메세지 폼만 보이도록 한다.
+    socket.emit("enter_room", input.value, showRoom);
+    roomName = input.value;
+    input.value = "";
+}
+</pre>
+
+
